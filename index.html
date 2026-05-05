@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = 200;
+
+let player = { x: 50, y: 150, vy: 0, onGround: true };
+let gravity = 0.5;
+let obstacles = [];
+
+function spawnObstacle() {
+  obstacles.push({ x: canvas.width, y: 150, w: 20, h: 20 });
+}
+setInterval(spawnObstacle, 1500);
+
+function jump() {
+  if (player.onGround) {
+    player.vy = -10;
+    player.onGround = false;
+  }
+}
+
+canvas.addEventListener("touchstart", jump);
+canvas.addEventListener("mousedown", jump);
+
+function update() {
+  player.vy += gravity;
+  player.y += player.vy;
+
+  if (player.y > 150) {
+    player.y = 150;
+    player.onGround = true;
+  }
+
+  obstacles.forEach(o => o.x -= 5);
+
+  // 当たり判定
+  obstacles.forEach(o => {
+    if (
+      player.x < o.x + o.w &&
+      player.x + 20 > o.x &&
+      player.y < o.y + o.h &&
+      player.y + 20 > o.y
+    ) {
+      alert("Game Over");
+      location.reload();
+    }
+  });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // プレイヤー
+  ctx.fillRect(player.x, player.y, 20, 20);
+
+  // 障害物
+  obstacles.forEach(o => {
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+  });
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
