@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tank Game+</title>
+<style>
+  body { margin:0; overflow:hidden; background:#111; font-family:sans-serif; }
+  canvas { display:block; }
+  #hud {
+    position:fixed; top:10px; left:10px; color:#fff; font-size:14px;
+    background:rgba(0,0,0,0.4); padding:8px 10px; border-radius:10px;
+  }
+  #ui { position:fixed; bottom:0; width:100%; height:40%; pointer-events:none; }
+  .joystick {
+    position:absolute; left:20px; bottom:20px;
+    width:120px; height:120px; border-radius:50%;
+    background:rgba(255,255,255,0.1);
+    pointer-events:auto;
+  }
+  .stick {
+    position:absolute; width:50px; height:50px;
+    background:rgba(255,255,255,0.5);
+    border-radius:50%; top:35px; left:35px;
+  }
+  .buttons { position:absolute; right:20px; bottom:20px; pointer-events:auto; }
+  button {
+    width:70px; height:70px; margin:5px;
+    border-radius:50%; border:none;
+    font-size:16px;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">Score: 0 | Stage: 1 | HP: 3</div>
+
+<div id="ui">
+  <div class="joystick" id="joy"><div class="stick" id="stick"></div></div>
+  <div class="buttons">
+    <button id="forward">↑</button><br>
+    <button id="back">↓</button>
+    <button id="fire">●</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+// ===== 状態 =====
+let stage = 1;
+let score = 0;
+let hp = 3;
+
+let player = { x:200, y:400, angle:0, speed:0, size:20 };
+let bullets = [];
+let enemyBullets = [];
+let enemies = [];
+let obstacles = [];
+
+// ===== 生成 =====
+function spawnStage(){
+  enemies = [];
+  obstacles = [];
+  let enemyCount = 3 + stage; // ステージで増加
+  for(let i=0;i<enemyCount;i++){
+    enemies.push({
+      x:Math.random()*canvas.width,
+      y:Math.random()*canvas.height/2,
+      speed:1 + stage*0.2,
+      reload:0
+    });
+  }
+  for(let i=0;i<6;i++){
+    obstacles.push({
+      x:Math.random()*canvas.width,
+      y:Math.random()*canvas.height,
+      w:40, h:40
+    });
+  }
+}
+spawnStage();
+
+// ===== 入力（ジョイスティック） =====
+let joy = document.getElementById("joy");
+let stick = document.getElementById("stick");
+let joyData = { active:false, dx:0, dy:0 };
+
+joy.addEventListener("touchstart", ()=> joyData.active=true);
+joy.addEventListener("touchmove", e=>{
+  let t = e.touches[0];
+  let rect = joy.getBoundingClientRect();
+  let x = t.clientX - rect.left - 60;
+  let y = t.clientY - rect.top - 60;
+  joyData.dx = x/60;
+  joyData.dy = y/60;
+  stick.style.transform = `translate(${x}px, ${y}px)`;
+});
+joy.addEventListener("touchend", ()=>{
+  joyData.active=false; joyData.dx=0; joyData.dy=0;
+  stick.style.transform = `translate(0,0)`;
+});
+
+// ボタン
+let forward=false, back=false, firing=false;
+document.getElementById("forward").ontouchstart=()=>forward=true;
+document.getElementById("forward").ontouchend=()=>forward=false;
+document.getElementById("back").ontouchstart=()=>back=true;
+document.getElementById("back").ontouchend=()=>back=false;
+document.getElementById("fire").ontouchstart=()=>firing=true;
+document.getElementById("fire").ontouchend=()=>firing=false;
+
+// ===== 発射 =====
+setInterval(()=>{
+  if(firing){
+    bullets.push({
+      x:player.x,
+      y:player.y,
+      vx:Math.cos(player.angle)*6,
+      vy:Math.sin(player.angle)*6
+    });
+  }
+},250);
+
+// ===== 更新 =====
+function update(){
+  // 向き
+  if(joyData.active){
+    player.angle = Math.atan2(joyData.dy, joyData.dx);
+  }
+
+  // 前後
+  if(forward) player.speed=2.5;
+  else if(back) player.speed=-2.5;
+  else player.speed=0;
+
+  player.x += Math.cos(player.angle)*player.speed;
+  player.y += Math.sin(player.angle)*player.speed;
+
+  // 弾移動
+  bullets.forEach(b=>{ b.x+=b.vx; b.y+=b.vy; });
+  enemyBullets.forEach(b=>{ b.x+=b.vx; b.y+=b.vy; });
+
+  // 弾削除
+  bullets = bullets.filter(b=> b.x>0 && b.x<canvas.width && b.y>0 && b.y<canvas.height);
+  enemyBullets = enemyBullets.filter(b=> b.x>0 && b.x<canvas.width && b.y>0 && b.y<canvas.height);
+
+  // ===== 敵AI（包囲・回り込み） =====
+  enemies.forEach((e,i)=>{
+    let dx = player.x - e.x;
+    let dy = player.y - e.y;
+    let baseAngle = Math.atan2(dy, dx);
+
+    // 敵ごとに角度をずらす → 包囲
+    let offset = (i - enemies.length/2) * 0.5;
+    let angle = baseAngle + offset;
+
+    e.x += Math.cos(angle)*e.speed;
+    e.y += Math.sin(angle)*e.speed;
+
+    // 発射（クールタイム）
+    e.reload--;
+    if(e.reload <= 0){
+      enemyBullets.push({
+        x:e.x,
+        y:e.y,
+        vx:Math.cos(baseAngle)*4,
+        vy:Math.sin(baseAngle)*4
+      });
+      e.reload = 60 + Math.random()*60;
+    }
+  });
+
+  // ===== 衝突 =====
+  // プレイヤー被弾
+  enemyBullets.forEach((b,bi)=>{
+    if(Math.hypot(b.x-player.x, b.y-player.y) < 15){
+      hp--;
+      enemyBullets.splice(bi,1);
+    }
+  });
+
+  // 敵撃破
+  bullets.forEach((b,bi)=>{
+    enemies.forEach((e,ei)=>{
+      if(Math.hypot(b.x-e.x, b.y-e.y) < 20){
+        enemies.splice(ei,1);
+        bullets.splice(bi,1);
+        score += 100;
+      }
+    });
+  });
+
+  // ステージクリア
+  if(enemies.length === 0){
+    stage++;
+    spawnStage();
+  }
+
+  // ゲームオーバー
+  if(hp <= 0){
+    alert("Game Over\nScore: " + score);
+    location.reload();
+  }
+
+  document.getElementById("hud").innerText = `Score: ${score} | Stage: ${stage} | HP: ${hp}`;
+}
+
+// ===== 描画 =====
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // プレイヤー（赤）
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+  ctx.fillStyle="red";
+  ctx.fillRect(-15,-10,30,20);
+  ctx.restore();
+
+  // 敵（黒）
+  ctx.fillStyle="black";
+  enemies.forEach(e=> ctx.fillRect(e.x-15,e.y-10,30,20));
+
+  // 弾
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=> ctx.fillRect(b.x,b.y,5,5));
+  ctx.fillStyle="orange";
+  enemyBullets.forEach(b=> ctx.fillRect(b.x,b.y,5,5));
+
+  // 障害物
+  ctx.fillStyle="gray";
+  obstacles.forEach(o=> ctx.fillRect(o.x,o.y,o.w,o.h));
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
