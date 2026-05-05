@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tank Game+</title>
+<style>
+  body { margin:0; overflow:hidden; background:#fff; font-family:sans-serif; }
+  canvas { display:block; }
+  #hud {
+    position:fixed; top:10px; left:10px; color:#000; font-size:14px;
+    background:rgba(255,255,255,0.7); padding:8px 10px; border-radius:10px;
+  }
+  #startScreen {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:#fff; display:flex; justify-content:center; align-items:center;
+    flex-direction:column; z-index:10;
+  }
+  #startBtn {
+    padding:15px 30px; font-size:20px; border:none; border-radius:10px;
+  }
+  #ui { position:fixed; bottom:0; width:100%; height:40%; pointer-events:none; }
+  .joystick {
+    position:absolute; left:20px; bottom:20px;
+    width:120px; height:120px; border-radius:50%;
+    background:rgba(0,0,0,0.1);
+    pointer-events:auto;
+  }
+  .stick {
+    position:absolute; width:50px; height:50px;
+    background:rgba(0,0,0,0.4);
+    border-radius:50%; top:35px; left:35px;
+  }
+  .buttons { position:absolute; right:20px; bottom:20px; pointer-events:auto; }
+  button {
+    width:70px; height:70px; margin:5px;
+    border-radius:50%; border:none;
+    font-size:16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>Tank Game</h1>
+  <button id="startBtn">START</button>
+</div>
+
+<canvas id="game"></canvas>
+<div id="hud">Score: 0 | Stage: 1 | HP: 3</div>
+
+<div id="ui">
+  <div class="joystick" id="joy"><div class="stick" id="stick"></div></div>
+  <div class="buttons">
+    <button id="forward">↑</button>
+    <button id="fire">●</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+let gameRunning = false;
+let stage, score, hp;
+let player, bullets, enemyBullets, enemies;
+
+function clamp(val, min, max){ return Math.max(min, Math.min(max, val)); }
+
+function initGame(){
+  stage = 1;
+  score = 0;
+  hp = 3;
+
+  player = { x:200, y:400, angle:0, speed:0, size:15 };
+  bullets = [];
+  enemyBullets = [];
+  enemies = [];
+
+  spawnStage();
+}
+
+function spawnStage(){
+  enemies = [];
+  let enemyCount = 3 + stage;
+  for(let i=0;i<enemyCount;i++){
+    enemies.push({
+      x:Math.random()*canvas.width,
+      y:Math.random()*canvas.height/2,
+      speed:1 + stage*0.2,
+      reload:0,
+      size:15
+    });
+  }
+}
+
+// ===== 入力 =====
+let joy = document.getElementById("joy");
+let stick = document.getElementById("stick");
+let joyData = { active:false, dx:0, dy:0 };
+
+joy.addEventListener("touchstart", ()=> joyData.active=true);
+joy.addEventListener("touchmove", e=>{
+  let t = e.touches[0];
+  let rect = joy.getBoundingClientRect();
+  let x = t.clientX - rect.left - 60;
+  let y = t.clientY - rect.top - 60;
+  joyData.dx = x/60;
+  joyData.dy = y/60;
+  stick.style.transform = `translate(${x}px, ${y}px)`;
+});
+joy.addEventListener("touchend", ()=>{
+  joyData.active=false; joyData.dx=0; joyData.dy=0;
+  stick.style.transform = `translate(0,0)`;
+});
+
+let forward=false, firing=false;
+document.getElementById("forward").ontouchstart=()=>forward=true;
+document.getElementById("forward").ontouchend=()=>forward=false;
+document.getElementById("fire").ontouchstart=()=>firing=true;
+document.getElementById("fire").ontouchend=()=>firing=false;
+
+setInterval(()=>{
+  if(firing && gameRunning){
+    bullets.push({
+      x:player.x,
+      y:player.y,
+      vx:Math.cos(player.angle)*6,
+      vy:Math.sin(player.angle)*6
+    });
+  }
+},250);
+
+function update(){
+  if(!gameRunning) return;
+
+  if(joyData.active){
+    player.angle = Math.atan2(joyData.dy, joyData.dx);
+  }
+
+  if(forward) player.speed=2.5;
+  else player.speed=0;
+
+  player.x += Math.cos(player.angle)*player.speed;
+  player.y += Math.sin(player.angle)*player.speed;
+
+  // 画面内に制限
+  player.x = clamp(player.x, player.size, canvas.width - player.size);
+  player.y = clamp(player.y, player.size, canvas.height - player.size);
+
+  bullets.forEach(b=>{ b.x+=b.vx; b.y+=b.vy; });
+  enemyBullets.forEach(b=>{ b.x+=b.vx; b.y+=b.vy; });
+
+  bullets = bullets.filter(b=> b.x>0 && b.x<canvas.width && b.y>0 && b.y<canvas.height);
+  enemyBullets = enemyBullets.filter(b=> b.x>0 && b.x<canvas.width && b.y>0 && b.y<canvas.height);
+
+  enemies.forEach((e,i)=>{
+    let dx = player.x - e.x;
+    let dy = player.y - e.y;
+    let baseAngle = Math.atan2(dy, dx);
+    let offset = (i - enemies.length/2) * 0.5;
+    let angle = baseAngle + offset;
+
+    e.x += Math.cos(angle)*e.speed;
+    e.y += Math.sin(angle)*e.speed;
+
+    // 敵も画面内制限
+    e.x = clamp(e.x, e.size, canvas.width - e.size);
+    e.y = clamp(e.y, e.size, canvas.height - e.size);
+
+    e.reload--;
+    if(e.reload <= 0){
+      enemyBullets.push({
+        x:e.x,
+        y:e.y,
+        vx:Math.cos(baseAngle)*2, // ← 半分の速度
+        vy:Math.sin(baseAngle)*2
+      });
+      e.reload = 60 + Math.random()*60;
+    }
+  });
+
+  enemyBullets.forEach((b,bi)=>{
+    if(Math.hypot(b.x-player.x, b.y-player.y) < 15){
+      hp--;
+      enemyBullets.splice(bi,1);
+    }
+  });
+
+  bullets.forEach((b,bi)=>{
+    enemies.forEach((e,ei)=>{
+      if(Math.hypot(b.x-e.x, b.y-e.y) < 20){
+        enemies.splice(ei,1);
+        bullets.splice(bi,1);
+        score += 100;
+      }
+    });
+  });
+
+  if(enemies.length === 0){
+    stage++;
+    spawnStage();
+  }
+
+  if(hp <= 0){
+    gameRunning = false;
+    document.getElementById("startScreen").style.display = "flex";
+  }
+
+  document.getElementById("hud").innerText = `Score: ${score} | Stage: ${stage} | HP: ${hp}`;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+  ctx.fillStyle="red";
+  ctx.fillRect(-15,-10,30,20);
+  ctx.restore();
+
+  ctx.fillStyle="black";
+  enemies.forEach(e=> ctx.fillRect(e.x-15,e.y-10,30,20));
+
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=> ctx.fillRect(b.x,b.y,5,5));
+
+  ctx.fillStyle="orange";
+  enemyBullets.forEach(b=> ctx.fillRect(b.x,b.y,5,5));
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// スタート
+document.getElementById("startBtn").onclick = ()=>{
+  document.getElementById("startScreen").style.display = "none";
+  initGame();
+  gameRunning = true;
+};
+</script>
+</body>
+</html>
