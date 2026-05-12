@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>でかすぎ君風 棒人間ゲーム</title>
+<title>棒人間ゲーム</title>
 
 <style>
 
@@ -160,7 +160,8 @@ const GROUND = () => canvas.height - 160;
 
 const GOAL_X = 3500;
 
-const GRAVITY = 0.55;
+// 下方向重力なし
+const GRAVITY = 0;
 
 const LEG_LEN = 90;
 
@@ -172,7 +173,7 @@ let startTime = 0;
 const player = {
 
     x:200,
-    y:GROUND()-40,
+    y:canvas.height/2,
 
     vx:0,
     vy:0,
@@ -186,7 +187,10 @@ function makeLeg(){
     return {
 
         angle:0,
+
         angVel:0,
+
+        gravityVel:0,
 
         footX:0,
         footY:0,
@@ -201,7 +205,7 @@ const rightLeg = makeLeg();
 function resetGame(){
 
     player.x = 200;
-    player.y = GROUND()-40;
+    player.y = canvas.height/2;
 
     player.vx = 0;
     player.vy = 0;
@@ -236,8 +240,9 @@ function applyLegForce(leg, dir){
         leg.angVel -= torque;
     }
 
-    // 反作用
-    player.rotV += (dir === "cw") ? -0.01 : 0.01;
+    // 身体への反作用
+    player.rotV +=
+        (dir === "cw") ? -0.01 : 0.01;
 }
 
 function bind(id, leg, dir){
@@ -260,27 +265,39 @@ function updateLeg(leg){
     // 空気抵抗
     leg.angVel *= 0.97;
 
+    // 足の重力
+    const gravityTorque =
+        -Math.sin(leg.angle) * 0.015;
+
+    leg.gravityVel += gravityTorque;
+
+    leg.gravityVel *= 0.96;
+
+    leg.angVel += leg.gravityVel;
+
     // 回転
     leg.angle += leg.angVel;
 
-    // 足先位置
-    leg.footX = Math.sin(leg.angle) * LEG_LEN;
-    leg.footY = Math.cos(leg.angle) * LEG_LEN;
+    // 足位置
+    leg.footX =
+        Math.sin(leg.angle) * LEG_LEN;
 
-    // 地面接触
+    leg.footY =
+        Math.cos(leg.angle) * LEG_LEN;
+
+    // 接地判定
     const footWorldY =
         player.y + 40 + leg.footY;
 
-    leg.grounded = footWorldY >= GROUND();
+    leg.grounded =
+        footWorldY >= GROUND();
 
-    // 接地時
+    // 接地
     if(leg.grounded){
 
-        // ===== 摩擦力 =====
-
+        // 摩擦
         const grip = 0.82;
 
-        // 地面との摩擦
         const groundPush =
             -leg.angVel * grip;
 
@@ -290,17 +307,17 @@ function updateLeg(leg){
         // 身体回転
         player.rotV += groundPush * 0.018;
 
-        // 少し浮く
-        player.vy -= Math.abs(groundPush) * 0.18;
-
-        // 足側の摩擦
+        // 足摩擦
         leg.angVel *= 0.88;
+
+        // 重力減衰
+        leg.gravityVel *= 0.7;
     }
 }
 
 function updatePhysics(){
 
-    // 重力
+    // 重力なし
     player.vy += GRAVITY;
 
     // 移動
@@ -327,17 +344,6 @@ function updatePhysics(){
     }else{
 
         player.vx *= 0.995;
-    }
-
-    // 地面
-    if(player.y > GROUND()-40){
-
-        player.y = GROUND()-40;
-
-        if(player.vy > 0){
-
-            player.vy *= -0.15;
-        }
     }
 
     // 回転制限
@@ -436,29 +442,9 @@ function drawPlayer(){
     ctx.restore();
 }
 
+// 地面描画なし
 function drawGround(){
 
-    ctx.fillStyle = "#67c967";
-
-    ctx.fillRect(
-        0,
-        GROUND(),
-        canvas.width,
-        300
-    );
-
-    ctx.strokeStyle = "#999";
-    ctx.lineWidth = 3;
-
-    for(let i=0;i<40;i++){
-
-        const x = i*180;
-
-        ctx.beginPath();
-        ctx.moveTo(x, GROUND()+5);
-        ctx.lineTo(x+70, GROUND()+5);
-        ctx.stroke();
-    }
 }
 
 function drawGoal(){
@@ -467,7 +453,7 @@ function drawGoal(){
 
     ctx.fillRect(
         GOAL_X,
-        GROUND()-120,
+        canvas.height/2 - 120,
         8,
         200
     );
@@ -476,9 +462,9 @@ function drawGoal(){
 
     ctx.beginPath();
 
-    ctx.moveTo(GOAL_X+8, GROUND()-120);
-    ctx.lineTo(GOAL_X+80, GROUND()-90);
-    ctx.lineTo(GOAL_X+8, GROUND()-60);
+    ctx.moveTo(GOAL_X+8, canvas.height/2 - 120);
+    ctx.lineTo(GOAL_X+80, canvas.height/2 - 90);
+    ctx.lineTo(GOAL_X+8, canvas.height/2 - 60);
 
     ctx.fill();
 }
