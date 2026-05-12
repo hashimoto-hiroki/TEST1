@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>音の高さグラフ</title>
+<title>リアルタイム音程グラフ</title>
 
 <style>
 body{
@@ -18,16 +18,27 @@ canvas{
     border:1px solid white;
     margin-top:20px;
 }
+
+button{
+    font-size:20px;
+    padding:10px 20px;
+    margin-top:20px;
+}
+
+#freq{
+    font-size:24px;
+}
 </style>
 </head>
 <body>
 
 <h1>リアルタイム音程グラフ</h1>
+
 <button id="startBtn">開始</button>
 
 <br>
 
-<canvas id="canvas" width="800" height="400"></canvas>
+<canvas id="canvas" width="900" height="400"></canvas>
 
 <p id="freq">周波数: -- Hz</p>
 
@@ -41,6 +52,13 @@ const freqText = document.getElementById("freq");
 let audioContext;
 let analyser;
 let dataArray;
+
+let history = [];
+
+// 初期値を中央ラインにする
+for(let i=0;i<canvas.width;i++){
+    history.push(0);
+}
 
 async function startAudio(){
 
@@ -76,6 +94,7 @@ function autoCorrelate(buffer, sampleRate){
 
     rms = Math.sqrt(rms / SIZE);
 
+    // 無音判定
     if(rms < 0.01) return -1;
 
     let r1 = 0;
@@ -107,6 +126,7 @@ function autoCorrelate(buffer, sampleRate){
     }
 
     let d = 0;
+
     while(c[d] > c[d+1]) d++;
 
     let maxpos = -1;
@@ -124,8 +144,6 @@ function autoCorrelate(buffer, sampleRate){
     return sampleRate / T0;
 }
 
-let history = [];
-
 function draw(){
 
     requestAnimationFrame(draw);
@@ -137,39 +155,62 @@ function draw(){
         audioContext.sampleRate
     );
 
+    // 無音時は0Hzとして扱う
+    if(freq === -1){
+        freq = 0;
+        freqText.textContent = "周波数: 0 Hz";
+    }else{
+        freqText.textContent =
+            "周波数: " + freq.toFixed(1) + " Hz";
+    }
+
+    history.push(freq);
+
+    if(history.length > canvas.width){
+        history.shift();
+    }
+
     ctx.fillStyle = "black";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    if(freq !== -1){
+    // 中央ライン
+    ctx.strokeStyle = "#444";
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height - 1);
+    ctx.lineTo(canvas.width, canvas.height - 1);
+    ctx.stroke();
 
-        freqText.textContent =
-            "周波数: " + freq.toFixed(1) + " Hz";
+    // グラフ描画
+    ctx.beginPath();
 
-        history.push(freq);
+    for(let i=0;i<history.length;i++){
 
-        if(history.length > canvas.width){
-            history.shift();
-        }
+        let y;
 
-        ctx.beginPath();
+        if(history[i] === 0){
 
-        for(let i=0;i<history.length;i++){
+            // 無音時は下に表示
+            y = canvas.height - 5;
 
-            let y =
+        }else{
+
+            y =
                 canvas.height -
                 (history[i] / 1000) * canvas.height;
 
-            if(i===0){
-                ctx.moveTo(i,y);
-            }else{
-                ctx.lineTo(i,y);
-            }
+            if(y < 0) y = 0;
         }
 
-        ctx.strokeStyle = "lime";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if(i === 0){
+            ctx.moveTo(i,y);
+        }else{
+            ctx.lineTo(i,y);
+        }
     }
+
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 }
 
 document.getElementById("startBtn")
