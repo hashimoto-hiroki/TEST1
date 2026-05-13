@@ -2,296 +2,84 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>音程グラフ</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>カ or 力 ゲーム</title>
 <style>
-
-html,body{
-    margin:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    background:#111;
-    color:white;
-    font-family:sans-serif;
-}
-
-#container{
-    width:100vw;
-    height:100vh;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-}
-
-h1{
-    margin:10px;
-}
-
-button{
-    font-size:20px;
-    padding:10px 20px;
-}
-
-#freq{
-    font-size:24px;
-    margin:10px;
-}
-
-canvas{
-    flex:1;
-    width:100%;
-    background:black;
-    display:block;
-}
-
-</style>
-</head>
-<body>
-
-<div id="container">
-
-<h1>リアルタイム音程グラフ</h1>
-
-<button id="startBtn">開始</button>
-
-<p id="freq">周波数: -- Hz</p>
-
-<canvas id="canvas"></canvas>
-
-</div>
-
-<script>
-
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
-const freqText = document.getElementById("freq");
-
-let audioContext;
-let analyser;
-let dataArray;
-
-const MAX_FREQ = 2000;
-
-function resizeCanvas(){
-
-    canvas.width = window.innerWidth;
-    canvas.height =
-        window.innerHeight - 120;
-
-    history = [];
-
-    for(let i=0;i<canvas.width;i++){
-        history.push(0);
-    }
-}
-
-window.addEventListener("resize",resizeCanvas);
-
-resizeCanvas();
-
-let history = [];
-
-async function startAudio(){
-
-    const stream =
-        await navigator.mediaDevices.getUserMedia({
-            audio:true
-        });
-
-    audioContext = new AudioContext();
-
-    const source =
-        audioContext.createMediaStreamSource(stream);
-
-    analyser = audioContext.createAnalyser();
-
-    analyser.fftSize = 2048;
-
-    source.connect(analyser);
-
-    dataArray =
-        new Float32Array(analyser.fftSize);
-
-    draw();
-}
-
-function autoCorrelate(buffer,sampleRate){
-
-    let SIZE = buffer.length;
-
-    let rms = 0;
-
-    for(let i=0;i<SIZE;i++){
-        rms += buffer[i] * buffer[i];
+    body {
+        margin: 0;
+        font-family: sans-serif;
+        background: #f4f4f4;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
     }
 
-    rms = Math.sqrt(rms / SIZE);
-
-    if(rms < 0.01) return -1;
-
-    let c = new Array(SIZE).fill(0);
-
-    for(let i=0;i<SIZE;i++){
-        for(let j=0;j<SIZE-i;j++){
-            c[i] += buffer[j] * buffer[j+i];
-        }
+    .container {
+        width: 95%;
+        max-width: 500px;
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        text-align: center;
     }
 
-    let d = 0;
-
-    while(c[d] > c[d+1]) d++;
-
-    let maxpos = -1;
-    let maxval = -1;
-
-    for(let i=d;i<SIZE;i++){
-        if(c[i] > maxval){
-            maxval = c[i];
-            maxpos = i;
-        }
+    h1 {
+        margin-top: 0;
+        font-size: 2rem;
     }
 
-    let T0 = maxpos;
-
-    return sampleRate / T0;
-}
-
-// ドの周波数一覧
-const doNotes = [
-    {name:"ド2",freq:65.4},
-    {name:"ド3",freq:130.8},
-    {name:"ド4",freq:261.6},
-    {name:"ド5",freq:523.3},
-    {name:"ド6",freq:1046.5}
-];
-
-function draw(){
-
-    requestAnimationFrame(draw);
-
-    analyser.getFloatTimeDomainData(dataArray);
-
-    let freq =
-        autoCorrelate(
-            dataArray,
-            audioContext.sampleRate
-        );
-
-    if(freq === -1){
-        freq = 0;
-        freqText.textContent =
-            "周波数: 0 Hz";
-    }else{
-        freqText.textContent =
-            "周波数: " +
-            freq.toFixed(1) +
-            " Hz";
+    #character {
+        font-size: 10rem;
+        margin: 30px 0;
+        user-select: none;
+        transition: transform 0.1s;
     }
 
-    history.push(freq);
-
-    if(history.length > canvas.width){
-        history.shift();
+    .buttons {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
     }
 
-    ctx.fillStyle = "black";
-    ctx.fillRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
-
-    // ===== グリッド =====
-
-    ctx.strokeStyle = "#222";
-    ctx.lineWidth = 1;
-
-    for(let hz=0; hz<=MAX_FREQ; hz+=100){
-
-        let y =
-            canvas.height -
-            (hz / MAX_FREQ) *
-            canvas.height;
-
-        ctx.beginPath();
-        ctx.moveTo(0,y);
-        ctx.lineTo(canvas.width,y);
-        ctx.stroke();
-
-        ctx.fillStyle = "#666";
-        ctx.font = "12px sans-serif";
-        ctx.fillText(hz + "Hz",5,y-2);
+    button {
+        font-size: 1.5rem;
+        padding: 15px 30px;
+        border: none;
+        border-radius: 15px;
+        cursor: pointer;
+        transition: 0.2s;
     }
 
-    // ===== ドの基準線 =====
-
-    for(let note of doNotes){
-
-        let y =
-            canvas.height -
-            (note.freq / MAX_FREQ) *
-            canvas.height;
-
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 1;
-
-        ctx.beginPath();
-        ctx.moveTo(0,y);
-        ctx.lineTo(canvas.width,y);
-        ctx.stroke();
-
-        ctx.fillStyle = "red";
-        ctx.font = "16px sans-serif";
-
-        ctx.fillText(
-            note.name +
-            " (" +
-            note.freq +
-            "Hz)",
-            canvas.width - 150,
-            y - 5
-        );
+    button:hover {
+        transform: scale(1.05);
     }
 
-    // ===== 波形 =====
-
-    ctx.beginPath();
-
-    for(let i=0;i<history.length;i++){
-
-        let y;
-
-        if(history[i] === 0){
-
-            y = canvas.height;
-
-        }else{
-
-            y =
-                canvas.height -
-                (history[i] / MAX_FREQ) *
-                canvas.height;
-        }
-
-        if(i===0){
-            ctx.moveTo(i,y);
-        }else{
-            ctx.lineTo(i,y);
-        }
+    .ka {
+        background: #4caf50;
+        color: white;
     }
 
-    ctx.strokeStyle = "lime";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-}
+    .power {
+        background: #2196f3;
+        color: white;
+    }
 
-document.getElementById("startBtn")
-.onclick = startAudio;
+    #info {
+        margin-top: 25px;
+        font-size: 1.2rem;
+        line-height: 1.8;
+    }
 
-</script>
+    #result {
+        font-size: 2rem;
+        margin-top: 10px;
+        height: 45px;
+    }
 
-</body>
+    #startBtn {
+        margin-top: 20px;
+        background: #ff9800;
 </html>
